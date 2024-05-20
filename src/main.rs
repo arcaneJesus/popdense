@@ -1,6 +1,7 @@
 use std::f64::consts::PI;
 use std::fmt::Debug;
-use std::ops::Neg;
+use std::iter::Sum;
+use std::ops::*;
 
 const TWO_PI: f64 = PI * 2.;
 const HALF_PI: f64 = PI / 2.;
@@ -14,6 +15,12 @@ trait Coordinate: Sized {
     fn round(&self, fix: u32) -> Self;
 }
 
+trait Avg {
+    type Item;
+
+    fn avg(&self) -> Self::Item;
+}
+
 #[inline(always)]
 fn tens(fix: u32) -> f64 {
     10f64.powi(fix as i32)
@@ -24,11 +31,11 @@ fn quick_fix(n: f64, tens: f64) -> f64 {
     (n * tens).round() / tens
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Copy, Clone)]
 struct SphericalCoordinate {
     rho: f64,
     theta: f64,
-    phi: f64
+    phi: f64,
 }
 
 impl SphericalCoordinate {
@@ -74,7 +81,7 @@ impl Coordinate for SphericalCoordinate {
         Self {
             rho,
             theta,
-            phi
+            phi,
         }
     }
 }
@@ -88,7 +95,7 @@ impl From<CartesianCoordinate> for SphericalCoordinate {
          */
         let delta = (value.x.powi(2) + value.y.powi(2)).sqrt();
         let rho = (value.x.powi(2) + value.y.powi(2) + value.z.powi(2)).sqrt();
-        let theta= if value.z > 0. {
+        let theta = if value.z > 0. {
             delta.atan2(value.z)
         } else if value.z < 0. {
             PI + delta.atan2(value.z)
@@ -118,6 +125,63 @@ impl From<CartesianCoordinate> for SphericalCoordinate {
     }
 }
 
+impl Add for SphericalCoordinate {
+    type Output = SphericalCoordinate;
+
+    fn add(self, rhs: Self) -> Self::Output {
+        SphericalCoordinate::from(CartesianCoordinate::from(self) + CartesianCoordinate::from(rhs))
+    }
+}
+
+impl AddAssign for SphericalCoordinate {
+    fn add_assign(&mut self, rhs: Self) {
+        self.rho = self.rho + &rhs.rho;
+        self.theta = self.theta + &rhs.theta;
+        self.phi = self.phi + &rhs.phi;
+    }
+}
+
+impl Sub for SphericalCoordinate {
+    type Output = SphericalCoordinate;
+
+    fn sub(self, rhs: Self) -> Self::Output {
+        SphericalCoordinate::from(CartesianCoordinate::from(self) - CartesianCoordinate::from(rhs))
+    }
+}
+
+impl Mul<u32> for SphericalCoordinate {
+    type Output = SphericalCoordinate;
+
+    fn mul(self, rhs: u32) -> Self::Output {
+        SphericalCoordinate::from(CartesianCoordinate::from(self) * rhs)
+    }
+}
+
+impl Div<u32> for SphericalCoordinate {
+    type Output = SphericalCoordinate;
+
+    fn div(self, rhs: u32) -> Self::Output {
+        SphericalCoordinate::from(CartesianCoordinate::from(self) / rhs)
+    }
+}
+
+impl Sum for SphericalCoordinate {
+    fn sum<I: Iterator<Item=Self>>(iter: I) -> Self {
+        let mut sum = SphericalCoordinate::zero();
+        iter.for_each(|x| sum += x);
+        sum
+    }
+}
+
+impl Avg for Vec<SphericalCoordinate> {
+    type Item = SphericalCoordinate;
+
+    fn avg(&self) -> Self::Item {
+        let len = self.len() as u32;
+        self.into_iter().map(move |&x| {x}).sum::<SphericalCoordinate>() / len
+    }
+}
+
 #[derive(Debug, PartialEq)]
 struct CartesianCoordinate {
     x: f64,
@@ -126,7 +190,7 @@ struct CartesianCoordinate {
 }
 
 impl Coordinate for CartesianCoordinate {
-    fn new(x: f64, y:f64, z: f64) -> Result<Self, String> {
+    fn new(x: f64, y: f64, z: f64) -> Result<Self, String> {
         Ok(Self {
             x,
             y,
@@ -160,8 +224,58 @@ impl From<SphericalCoordinate> for CartesianCoordinate {
     }
 }
 
-fn main() {
+impl Add for CartesianCoordinate {
+    type Output = CartesianCoordinate;
 
+    fn add(self, rhs: Self) -> Self::Output {
+        Self {
+            x: self.x + rhs.x,
+            y: self.y + rhs.y,
+            z: self.z + rhs.z,
+        }
+    }
+}
+
+impl Sub for CartesianCoordinate {
+    type Output = CartesianCoordinate;
+
+    fn sub(self, rhs: Self) -> Self::Output {
+        Self {
+            x: self.x - rhs.x,
+            y: self.y - rhs.y,
+            z: self.z - rhs.z,
+        }
+    }
+}
+
+impl Mul<u32> for CartesianCoordinate {
+    type Output = CartesianCoordinate;
+
+    fn mul(self, rhs: u32) -> Self::Output {
+        Self {
+            x: self.x * rhs as f64,
+            y: self.y * rhs as f64,
+            z: self.z * rhs as f64,
+        }
+    }
+}
+
+impl Div<u32> for CartesianCoordinate {
+    type Output = CartesianCoordinate;
+
+    fn div(self, rhs: u32) -> Self::Output {
+        Self {
+            x: self.x / rhs as f64,
+            y: self.y / rhs as f64,
+            z: self.z / rhs as f64,
+        }
+    }
+}
+
+fn main() {
+    let a = SphericalCoordinate::new(1., 0.5, 2.).unwrap();
+    let b = SphericalCoordinate::new(1., 1., 1.5).unwrap();
+    println!("{:?}", vec![a, b].avg());
 }
 
 #[cfg(test)]
@@ -170,7 +284,7 @@ mod tests {
 
     #[test]
     fn create_cartesian_coordinate() {
-        let coord = CartesianCoordinate::new(1., 1., 1.,).unwrap();
+        let coord = CartesianCoordinate::new(1., 1., 1.).unwrap();
         let zero = CartesianCoordinate::zero();
         assert_eq!(coord, CartesianCoordinate {
             x: 1.,
@@ -192,7 +306,7 @@ mod tests {
         assert_eq!(coord, SphericalCoordinate {
             rho: 1.,
             theta: HALF_PI,
-            phi: PI
+            phi: PI,
         });
         assert_eq!(zero, SphericalCoordinate {
             rho: 0.,
